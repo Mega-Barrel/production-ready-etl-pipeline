@@ -3,3 +3,5 @@
 
 # Add dataset to ignore files
 /dataset
+
+*__pycache__
