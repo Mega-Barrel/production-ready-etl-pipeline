@@ -5,3 +5,9 @@
 /dataset
 
 *__pycache__
+
+# code converage stats
+.coverage
+
+# vscode folder settings
+/.vscode
