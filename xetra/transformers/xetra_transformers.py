@@ -1,8 +1,12 @@
 """Xetra ETL Component"""
 import logging
+from datetime import datetime
 from typing import NamedTuple
 
+import pandas as pd
+
 from xetra.common.s3 import S3BucketConnector
+from xetra.common.meta_process import MetaProcess
 
 class XetraSourceConfig(NamedTuple):
     """
@@ -73,6 +77,53 @@ class XetraETL():
         self.meta_key = meta_key
         self.src_args = src_args
         self.trg_args = trg_args
-        self.extract_date = 
-        self.extract_date_list = 
-        self.meta_update_list = 
+        self.extract_date, self.extract_date_list = MetaProcess.return_date_list(
+            self.src_args.src_first_extract_date,
+            self.meta_key,
+            self.s3_bucket_target
+        )
+        self.meta_update_list = None
+
+    def extract(self):
+        """
+        Read the source data and concatenates them to one Pandas DataFrame
+        
+        :returns:
+            data_frame: Pandas DataFrame with the extracted data
+        """
+        self._logger.info('Extracting Xetra source files started...')
+        files = [
+            key for date in self.extract_date_list\
+                for key in self.s3_bucket_source.list_files_in_prefix(date)
+        ]
+        if not files:
+            data_frame = pd.DataFrame()
+        else:
+            data_frame = pd.concat(
+                [
+                    self.s3_bucket_source.read_csv_to_df(file) for file in files
+                ],
+                ignore_index=True
+            )
+        self._logger.info('Extracting Xetra source files finished.')
+        return data_frame
+
+    def transform_report1(self, data_frame: pd.dataFrame):
+        """
+        Applies the necessary transformation to create report 1
+        
+        :param data_frame: Pandas DataFrame as Input
+        
+        :returns:
+            data_frame: Transformed Pandas DataFrame as Output
+        """
+        if data_frame.empty:
+            self._logger.info('The dataframe is empty. No transformations will be applied.')
+            return data_frame
+        self._logger.info('Applying transformations to Xetra source data for report 1 started...')
+        # Filtering necessary source columns
+        data_frame = data_frame.loc[:, self.src_args.src_columns]
+        # Removing rows with missing values
+        data_frame.dropna(inplace=True)
+        # Calculating opening price per ISIN and day
+        
