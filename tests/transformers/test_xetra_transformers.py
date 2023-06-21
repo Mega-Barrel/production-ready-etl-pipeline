@@ -1,6 +1,7 @@
 """TestXetraETLMethods"""
 import os
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 import boto3
@@ -160,7 +161,7 @@ class TestXetraETLMethods(unittest.TestCase):
             df_return = xetra_etl.extract()
         # Test after method execution
         self.assertTrue(df_return.empty)
-    
+
     def test_extract_files(self):
         """
         Tests the extract method when
@@ -187,6 +188,164 @@ class TestXetraETLMethods(unittest.TestCase):
             df_result = xetra_etl.extract()
         # Test after method execution
         self.assertTrue(df_exp.equals(df_result))
+
+    def test_transform_report1_emptydf(self):
+        """
+        Tests the transform_report1 method with
+        an empty dataframe as input argument
+        """
+        # Expected results
+        log_exp = "The dataframe is empty. No transformations will be applied."
+        # Test init
+        extract_date = '2021-04-17'
+        extract_date_list = ['2021-04-16', '2021-04-17', '2021-04-18']
+        df_input = pd.DataFrame()
+        # Method execution
+        with patch.object(
+            MetaProcess, 
+            'return_date_list',
+            return_value=[extract_date, extract_date_list]
+        ):
+            xetra_etl = XetraETL(
+                self.s3_bucket_src,
+                self.s3_bucket_trg,
+                self.meta_key,
+                self.source_config,
+                self.target_config
+            )
+            with self.assertLogs() as logm:
+                df_result = xetra_etl.transform_report1(df_input)
+                # Log test after method execution
+                self.assertIn(log_exp, logm.output[0])
+            # Test after method execution
+            self.assertTrue(df_result.empty)
+
+    def test_transform_report1_ok(self):
+        """
+        Tests the transform_report1 method with
+        an DataFrame as input argument
+        """
+        # Expected results
+        log1_exp = 'Applying transformations to Xetra source data for report 1 started...'
+        log2_exp = 'Applying transformations to Xetra source data finished...'
+        df_exp = self.df_report
+        # Test init
+        extract_date = '2021-04-17'
+        extract_date_list = ['2014-04-16', '2014-04-17', '2014-04-18', '2014-04-19', '2014-04-20']
+        df_input = self.df_src.loc[1:8].reset_index(drop=True)
+        # Method execution
+        with patch.object(
+            MetaProcess, 
+            'return_date_list',
+            return_value=[extract_date, extract_date_list]
+        ):
+            xetra_etl = XetraETL(
+                self.s3_bucket_src,
+                self.s3_bucket_trg,
+                self.meta_key,
+                self.source_config,
+                self.target_config
+            )
+            with self.assertLogs() as logm:
+                df_result = xetra_etl.transform_report1(df_input)
+                # Log test after method execution
+                self.assertIn(log1_exp, logm.output[0])
+                self.assertIn(log2_exp, logm.output[1])
+        # Test after method execution
+        self.assertTrue(df_exp.equals(df_result))
+
+    def test_load(self):
+        """
+        Tests the load method
+        """
+        # Expected results
+        log1_exp = 'Xetra target data successfully written.'
+        log2_exp = 'Xetra meta file successfully updated.'
+        df_exp = self.df_report
+        meta_exp = ['2021-04-17', '2021-04-18', '2021-04-19']
+        # Test init
+        extract_date = '2021-04-17'
+        extract_date_list = ['2014-04-16', '2014-04-17', '2014-04-18', '2014-04-19', '2014-04-20']
+        df_input = self.df_report
+        # Method execution
+        with patch.object(
+            MetaProcess, 
+            'return_date_list',
+            return_value=[extract_date, extract_date_list]
+        ):
+            xetra_etl = XetraETL(
+                self.s3_bucket_src,
+                self.s3_bucket_trg,
+                self.meta_key,
+                self.source_config,
+                self.target_config
+            )
+            with self.assertLogs() as logm:
+                xetra_etl.load(df_input)
+                # Log test after method execution
+                self.assertIn(log1_exp, logm.output[0])
+                self.assertIn(log2_exp, logm.output[4])
+        # Test after method execution
+        trg_file = self.s3_bucket_trg.list_files_in_prefix(self.target_config.trg_key)[0]
+        data = self.trg_bucket.Object(key=trg_file).get().get('Body').read()
+        out_buffer = BytesIO(data)
+        df_result = pd.read_parquet(out_buffer)
+        self.assertTrue(df_exp.equals(df_result))
+        meta_file = self.s3_bucket_trg.list_files_in_prefix(self.meta_key)[0]
+        df_meta_result = self.s3_bucket_trg.read_csv_to_df(meta_file)
+        self.assertEqual(list(df_meta_result['source_date']), meta_exp)
+        # Clean up after test
+        self.trg_bucket.delete_objects(
+            Delete={
+                'Objects': [
+                    {
+                        'Key': trg_file
+                    },
+                    {
+                        'Key': trg_file
+                    }
+                ]
+            }
+        )
+    
+    def test_etl_report1(self):
+        """
+        Tests the etl_report1 method
+        """
+        # Expected results
+        df_exp = self.df_report
+        meta_exp = ['2021-04-17', '2021-04-18', '2021-04-19']
+        # Test init
+        extract_date = '2021-04-17'
+        extract_date_list = ['2021-04-16', '2021-04-17', '2021-04-18', '2021-04-19']
+        # Method execution
+        with patch.object(MetaProcess, "return_date_list",
+        return_value=[extract_date, extract_date_list]):
+            xetra_etl = XetraETL(self.s3_bucket_src, self.s3_bucket_trg,
+                         self.meta_key, self.source_config, self.target_config)
+            xetra_etl.etl_report1()
+        # Test after method execution
+        trg_file = self.s3_bucket_trg.list_files_in_prefix(self.target_config.trg_key)[0]
+        data = self.trg_bucket.Object(key=trg_file).get().get('Body').read()
+        out_buffer = BytesIO(data)
+        df_result = pd.read_parquet(out_buffer)
+        self.assertTrue(df_exp.equals(df_result))
+        meta_file = self.s3_bucket_trg.list_files_in_prefix(self.meta_key)[0]
+        df_meta_result = self.s3_bucket_trg.read_csv_to_df(meta_file)
+        self.assertEqual(list(df_meta_result['source_date']), meta_exp)
+        # Cleanup after test
+        self.trg_bucket.delete_objects(
+            Delete={
+                'Objects': [
+                    {
+                        'Key': trg_file
+                    },
+                    {
+                        'Key': trg_file
+                    }
+                ]
+            }
+        )
 
 if __name__ == '__main__':
     unittest.main()
