@@ -31,7 +31,7 @@ class XetraSourceConfig(NamedTuple):
     src_col_min_price: str
     src_col_max_price: str
     src_col_traded_vol: str
-    
+
 class XetraTargetConfig(NamedTuple):
     """
     Class for target configuration data
@@ -47,12 +47,12 @@ class XetraTargetConfig(NamedTuple):
     trg_key: str
     trg_key_date_format: str
     trg_format: str
-    
+
 class XetraETL():
     """
     Reads the Xetra data, transforms and write the transformed to target
     """
-    
+
     def __init__(
         self, 
         s3_bucket_src: S3BucketConnector,
@@ -61,10 +61,10 @@ class XetraETL():
         src_args: XetraSourceConfig,
         trg_args: XetraTargetConfig
     ):
-        
+
         """
         Constructor for XetraTransformer
-        
+
         :param s3_bucket_src: connection to source S3 bucket
         :param s3_bucket_trg: connection to target S3 bucket
         :param meta_key: used as self.meta_key -> key of meta file
